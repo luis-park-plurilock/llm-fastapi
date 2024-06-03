@@ -1,0 +1,58 @@
+version: '3.4' #docker version 3.4
+services:
+  fastapi:
+    build: #building the image using Dockerfile
+      context: .
+      dockerfile: ./Dockerfile
+    volumes: #changes in current directory will affect app directory in container
+      - .:/code/app
+    environment: #environmental variables
+      NODE_ENV: development
+      DATABASE_URL: mysql://root:S3cret@db:3306/todo_db
+    ports: #expose port 3000 for outside use
+      - 3000:80
+    restart: on-failure:10" #keep restarting until it connects to db
+    depends_on: #need db host to finish loading for fastapi to load
+      - db
+  db: 
+    image: mariadb:10.7
+    ports:
+      - 3306:3306
+    environment:
+      - MYSQL_ROOT_PASSWORD=S3cret
+      - MYSQL_DATABASE=todo_db
+  #if no exposed ports, anything outside of the docker network can't access it
+  llama:
+    build: #build ollama image
+      context: .
+      dockerfile: ./Dockerfile.ollama
+    #entrypoint is shell script, this is main process
+    entrypoint: /entrypoint.sh
+    #cache the ollama model for faster download time
+    ports:
+      - 11434:11434
+    volumes:
+      - ./ollama_cache:/root/.ollama 
+  stream:
+    build:
+      context: .
+      dockerfile: ./Dockerfile.ui
+    volumes:
+      - ./ui.py:/code/ui.py
+    depends_on:
+      - db
+    ports:
+      - 8501:8501
+  open-webui:
+     image: ghcr.io/open-webui/open-webui:main
+     container_name: open-webui
+     ports:
+       - 8282:8080
+     volumes:
+       - open-webui:/app/backend/data
+     environment:
+        - OLLAMA_BASE_URL=http://llama:11434
+        - HOST = llama
+     restart: unless-stopped
+volumes:
+  open-webui:

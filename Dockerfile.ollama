@@ -1,0 +1,10 @@
+#install python for image
+FROM ollama/ollama
+#copy over the requirements
+COPY ./entrypoint.sh /entrypoint.sh
+#make entrypoint executable
+RUN ["chmod", "+x", "/entrypoint.sh"]
+
+
+
+

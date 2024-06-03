@@ -1,0 +1,12 @@
+fastapi == 0.111.0
+pydantic>=2.7.0,<3.0.0
+mariadb ==1.1.10
+ollama == 0.2.0
+langchain-community == 0.2.1
+chromadb == 0.5.0
+langchain-text-splitters == 0.2.0
+langchain-core == 0.2.3
+langchain ==  0.2.1
+unstructured[all-docs]==0.2.0
+unstructured == 0.2.0
+pypdf == 4.2.0

@@ -1,0 +1,12 @@
+#install python for image
+FROM python:3.9
+#working directory
+WORKDIR /code
+#copy over the requirements
+COPY ./requirements_frontend.txt /code/requirements_frontend.txt
+#install requirements
+RUN pip3 install --no-cache-dir --upgrade -r ./requirements_frontend.txt
+#copy over code/files
+COPY ./ui.py /code
+#run fast api, main.py is the main process
+CMD ["streamlit", "run", "./ui.py"]
