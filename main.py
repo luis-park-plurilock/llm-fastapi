@@ -1,8 +1,4 @@
-from fastapi import FastAPI, UploadFile, File,  HTTPException
-from pydantic import BaseModel
-from enum import Enum
-import mariadb
-import sys
+from fastapi import FastAPI, UploadFile, File,  HTTPException, Query
 from ollama import Client
 import ollama
 from langchain_community.document_loaders import PyPDFLoader
@@ -15,61 +11,77 @@ from langchain_community.chat_models import ChatOllama
 from langchain_core.runnables import RunnablePassthrough
 from langchain.retrievers.multi_query import MultiQueryRetriever
 from fastapi.responses import JSONResponse
+from typing import List
 import os
 
 
 app = FastAPI()
 
-@app.get("/generate/{prompt}")
-async def llama(user_prompt: str, model: str, document: str = ""):
+@app.post("/generate/{prompt}")
+async def llama(user_prompt: str, model: str, documents: List[str] = Query(None)):
     client = Client(host='llama')
     try: 
         client.show(model)
     except:
         return {"Message": f"Model {model} not found"}
-    
-    if document:
+    if documents:
+        #embedding function will convert personal text to embeddings for specific model
         embedding_function=OllamaEmbeddings(model=model,  base_url = "http://llama:11434", show_progress=True)
         directory_path = f"/code/{model}"
         if not os.path.exists(directory_path):
             return {"Mesaage": f"No pdfs saved for model {model}"}
-        directory_path += f"/{document}"
-        if not os.path.exists(directory_path):
-            return {"Message": f"Document {document} not imported"}
-        print(directory_path)
-        db = Chroma(persist_directory= directory_path, embedding_function=embedding_function, collection_name="local-rag")
-        print(db.get(include=['embeddings', 'documents', 'metadatas']))
-        llm = ChatOllama(model=model,  base_url = "http://llama:11434")
-        QUERY_PROMPT = PromptTemplate(
-            input_variables=["question"],
-            template="""You are an AI language model assistant. Your task is to generate five
-            different versions of the given user question to retrieve relevant documents from
-            a vector database. By generating multiple perspectives on the user question, your
-            goal is to help the user overcome some of the limitations of the distance-based
-            similarity search. Provide these alternative questions separated by newlines.
-            Original question: {question}""",
-        )
-        retriever = MultiQueryRetriever.from_llm(
-            db.as_retriever(), 
-            llm,
-            prompt=QUERY_PROMPT
-        )
-        
-        #RAG prompt
-        template = """Answer the question based ONLY on the following context:
-        {context}
-        Question: {question}
-        """
-        prompt = ChatPromptTemplate.from_template(template)
-        chain = (
-        {"context": retriever, "question": RunnablePassthrough()}
-        | prompt
-        | llm
-        | StrOutputParser()
-        )
-        response = chain.invoke(user_prompt)
-        return response
-
+        length = len(directory_path)
+        for document in documents:
+            directory_path += f"/{document}"
+            if not os.path.exists(directory_path):
+                directory_path = directory_path[:length]
+                dir_list = os.listdir(directory_path) 
+                return {"Message": f"Document {document} not imported", f"Available Documents For {model}": dir_list}
+            directory_path = directory_path[:length]
+        res = {}
+        for document in documents:
+            directory_path += f"/{document}"
+            #connect to chroma db
+            db = Chroma(persist_directory= directory_path, embedding_function=embedding_function, collection_name="local-rag")
+            #connect to chose llm model
+            llm = ChatOllama(model=model,  base_url = "http://llama:11434")
+            #query prompt used for generating different perspectives of the given question
+            QUERY_PROMPT = PromptTemplate(
+                input_variables=["question"],
+                template="""You are an AI language model assistant. Your task is to generate five
+                different versions of the given user question to retrieve relevant documents from
+                a vector database. By generating multiple perspectives on the user question, your
+                goal is to help the user overcome some of the limitations of the distance-based
+                similarity search. Provide these alternative questions separated by newlines.
+                Original question: {question}""",
+            )
+            #retrieves proper vectors in the db that gives llm proper context
+            retriever = MultiQueryRetriever.from_llm(
+                db.as_retriever(), 
+                llm,
+                prompt=QUERY_PROMPT
+            )
+            #The template given to llm for final question. Gives the context and answer
+            template = """Answer the question based ONLY on the following context:
+            {context}
+            Question: {question}
+            """
+            #converts template to appropriate prompt
+            prompt = ChatPromptTemplate.from_template(template)
+            #user_prompt given as question, and context is the retriever
+            #then prompt utilized the question and context to generate proper prompt
+            #feed prompt to llm and then output it
+            chain = (
+            {"context": retriever, "question": RunnablePassthrough()}
+            | prompt
+            | llm
+            | StrOutputParser()
+            )
+            #call the chain
+            response = chain.invoke(user_prompt)
+            res[f"{document}.pdf"] = response
+            directory_path = directory_path[:length]
+        return res
     try: 
         response = client.chat(model=model, messages=[
         {
@@ -79,8 +91,6 @@ async def llama(user_prompt: str, model: str, document: str = ""):
     except ollama.ResponseError as e:
         return e.error
     return {'message': response['message']['content']}
-
-
 @app.post("/createModel/{modelName}")
 async def createModel(modelName: str, system: str, model: str):
     client = Client(host='llama')
@@ -114,7 +124,7 @@ async def importPDF(modelName: str, file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Invalid file type. Only PDF files are allowed.")
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="Invalid content type. Only PDF files are allowed.")
-    # Save the uploaded file to the specified path
+    # Save the uploaded file to the specified path inside docker container
     try:
         file_name = file.filename
         filepath = f"/code/app/{file_name}"
@@ -122,33 +132,37 @@ async def importPDF(modelName: str, file: UploadFile = File(...)):
             f.write(await file.read())
     except Exception as e:
         return JSONResponse(status_code=500, content={"message": str(e)})
+    #load the file suitable for splitting and chunking
     loader = PyPDFLoader(file_path=filepath)
     data = loader.load()
+    #remove excessive \n
     data[0].page_content = data[0].page_content.replace('\n', ' ')
-
-
     # Split and chunk 
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=7500, chunk_overlap=100)
     chunks = text_splitter.split_documents(data)
-    # Add to vector database
+    # Add to vector database and save to container
     doc_db = Chroma.from_documents(
         documents=chunks, 
         embedding=OllamaEmbeddings(model=modelName,  base_url = "http://llama:11434", show_progress=True),
         collection_name="local-rag",
         persist_directory= f"{modelName}/{file_name[:-4]}"
     )
-    all_db = Chroma.from_documents(
-        documents=chunks, 
-        embedding=OllamaEmbeddings(model=modelName,  base_url = "http://llama:11434", show_progress=True),
-        collection_name="local-rag",
-        persist_directory= f"{modelName}/All_Documents"
-    )
-    doc_db.persist()
-    all_db.persist()
-
     return {"Message": "Sucessfully added pdf"}
 
 
+@app.post("/list_documents/")
+async def list_documents(model: str):
+    client = Client(host='llama')
+    try: 
+        client.show(model)
+    except:
+        return {"Message": f"Model {model} not found"}
+    path = f"/code/{model}"
+    if not os.path.exists(path):
+        return {"Mesaage": f"No pdfs saved for model {model}"}
+    dir_list = os.listdir(path) 
+    return{f"Imported Documents for {model}": dir_list}
 
+    
 
 
