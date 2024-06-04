@@ -29,7 +29,7 @@ async def llama(user_prompt: str, modelName: str, documents: List[str] = Query(N
         embedding_function=OllamaEmbeddings(model=modelName,  base_url = "http://llama:11434", show_progress=True)
         directory_path = f"/code/vector_documents/{modelName}"
         if not os.path.exists(directory_path):
-            return {"Mesaage": f"No pdfs saved for model {modelName}"}
+            return {"Mesaage": f"No documents saved for model {modelName}"}
         length = len(directory_path)
         for document in documents:
             directory_path += f"/{document}"
@@ -107,8 +107,8 @@ async def createModel(baseModel: str, modelName: str, system: str = ""):
     except ollama.ResponseError as e:
         return e.error
 
-@app.post("/importPDF/")
-async def importPDF(modelName: str, file: UploadFile = File(...)):
+@app.post("/importDocument/")
+async def importDocument(modelName: str, file: UploadFile = File(...)):
     client = Client(host='llama')
     try: 
         client.show(modelName)
@@ -143,7 +143,7 @@ async def importPDF(modelName: str, file: UploadFile = File(...)):
         persist_directory= f"/code/vector_documents/{modelName}/{file_name[:-4]}"
     )
     os.remove(filepath)
-    return {"Message": "Sucessfully added pdf"}
+    return {"Message": f"Sucessfully added document {file_name}"}
 
 
 @app.post("/list_documents/")
@@ -155,7 +155,7 @@ async def list_documents(modelName: str):
         return {"Message": f"Model {modelName} not found"}
     path = f"/code/vector_documents/{modelName}"
     if not os.path.exists(path):
-        return {"Mesaage": f"No pdfs saved for model {modelName}"}
+        return {"Mesaage": f"No documents saved for model {modelName}"}
     dir_list = os.listdir(path) 
     return{f"Imported Documents for {modelName}": dir_list}
 
@@ -179,7 +179,7 @@ async def delete_document(document: str, modelName: str):
         return {"Message": f"Model {modelName} not found"}
     path = f"/code/vector_documents/{modelName}"
     modelpath = path
-    if not os.path.exists(path): return {"Message": f"Model {modelName} does not have any imported PDFs"}
+    if not os.path.exists(path): return {"Message": f"Model {modelName} does not have any imported documents"}
     path+= f"/{document}"
     available_docs = os.listdir(modelpath)
     if not os.path.exists(path): return {"Message": f"Document {document} does not exist", 
@@ -196,7 +196,7 @@ async def deleteAll_Documents(modelName: str):
     except:
         return {"Message": f"Model {modelName} not found"}
     path = f"/code/vector_documents/{modelName}"
-    if not os.path.exists(path): return {"Message": f"Model {modelName} does not have any imported PDFs"}
+    if not os.path.exists(path): return {"Message": f"Model {modelName} does not have any imported documents"}
     shutil.rmtree(path)
     return {"Message": f"Successfully removed all documents for model {modelName}"}
 
