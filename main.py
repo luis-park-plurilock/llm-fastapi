@@ -13,30 +13,30 @@ from langchain.retrievers.multi_query import MultiQueryRetriever
 from fastapi.responses import JSONResponse
 from typing import List
 import os
-
+import shutil
 
 app = FastAPI()
 
 @app.post("/generate/{prompt}")
-async def llama(user_prompt: str, model: str, documents: List[str] = Query(None)):
+async def llama(user_prompt: str, modelName: str, documents: List[str] = Query(None)):
     client = Client(host='llama')
     try: 
-        client.show(model)
+        client.show(modelName)
     except:
-        return {"Message": f"Model {model} not found"}
+        return {"Message": f"Model {modelName} not found"}
     if documents:
         #embedding function will convert personal text to embeddings for specific model
-        embedding_function=OllamaEmbeddings(model=model,  base_url = "http://llama:11434", show_progress=True)
-        directory_path = f"/code/{model}"
+        embedding_function=OllamaEmbeddings(model=modelName,  base_url = "http://llama:11434", show_progress=True)
+        directory_path = f"/code/vector_documents/{modelName}"
         if not os.path.exists(directory_path):
-            return {"Mesaage": f"No pdfs saved for model {model}"}
+            return {"Mesaage": f"No pdfs saved for model {modelName}"}
         length = len(directory_path)
         for document in documents:
             directory_path += f"/{document}"
             if not os.path.exists(directory_path):
                 directory_path = directory_path[:length]
                 dir_list = os.listdir(directory_path) 
-                return {"Message": f"Document {document} not imported", f"Available Documents For {model}": dir_list}
+                return {"Message": f"Document {document} not imported", f"Available Documents For {modelName}": dir_list}
             directory_path = directory_path[:length]
         res = {}
         for document in documents:
@@ -44,7 +44,7 @@ async def llama(user_prompt: str, model: str, documents: List[str] = Query(None)
             #connect to chroma db
             db = Chroma(persist_directory= directory_path, embedding_function=embedding_function, collection_name="local-rag")
             #connect to chose llm model
-            llm = ChatOllama(model=model,  base_url = "http://llama:11434")
+            llm = ChatOllama(model=modelName,  base_url = "http://llama:11434")
             #query prompt used for generating different perspectives of the given question
             QUERY_PROMPT = PromptTemplate(
                 input_variables=["question"],
@@ -83,7 +83,7 @@ async def llama(user_prompt: str, model: str, documents: List[str] = Query(None)
             directory_path = directory_path[:length]
         return res
     try: 
-        response = client.chat(model=model, messages=[
+        response = client.chat(model=modelName, messages=[
         {
             'role': 'user',
             'content': prompt,
@@ -91,26 +91,21 @@ async def llama(user_prompt: str, model: str, documents: List[str] = Query(None)
     except ollama.ResponseError as e:
         return e.error
     return {'message': response['message']['content']}
+
 @app.post("/createModel/{modelName}")
-async def createModel(modelName: str, system: str, model: str):
+async def createModel(baseModel: str, modelName: str, system: str = ""):
     client = Client(host='llama')
-    modelfile = f'''FROM {model}\nSYSTEM {system}'''
+    try: 
+        client.show(modelName)
+        return {"Message": f"Model Name {modelName} already exists"}
+    except:
+        print("User picked valid name")
+    modelfile = f'''FROM {baseModel}\nSYSTEM {system}'''
     try:
         response = client.create(model=modelName, modelfile=modelfile)
         return response
     except ollama.ResponseError as e:
         return e.error
-
-@app.delete("/deleteModel/{modelName}")
-async def deleteModel(modelName: str):
-    client = Client(host='llama')
-    try:
-        response = client.delete(model=modelName)
-        return response
-    except ollama.ResponseError as e:
-        return e.error
-    
-
 
 @app.post("/importPDF/")
 async def importPDF(modelName: str, file: UploadFile = File(...)):
@@ -145,24 +140,77 @@ async def importPDF(modelName: str, file: UploadFile = File(...)):
         documents=chunks, 
         embedding=OllamaEmbeddings(model=modelName,  base_url = "http://llama:11434", show_progress=True),
         collection_name="local-rag",
-        persist_directory= f"{modelName}/{file_name[:-4]}"
+        persist_directory= f"/code/vector_documents/{modelName}/{file_name[:-4]}"
     )
+    os.remove(filepath)
     return {"Message": "Sucessfully added pdf"}
 
 
 @app.post("/list_documents/")
-async def list_documents(model: str):
+async def list_documents(modelName: str):
     client = Client(host='llama')
     try: 
-        client.show(model)
+        client.show(modelName)
     except:
-        return {"Message": f"Model {model} not found"}
-    path = f"/code/{model}"
+        return {"Message": f"Model {modelName} not found"}
+    path = f"/code/vector_documents/{modelName}"
     if not os.path.exists(path):
-        return {"Mesaage": f"No pdfs saved for model {model}"}
+        return {"Mesaage": f"No pdfs saved for model {modelName}"}
     dir_list = os.listdir(path) 
-    return{f"Imported Documents for {model}": dir_list}
-
-    
+    return{f"Imported Documents for {modelName}": dir_list}
 
 
+@app.post("/list_models")
+async def list_models():
+    client = Client(host='llama')
+    all_models = []
+    for model in client.list()["models"]:
+        all_models.append(model["name"][0:-7])
+    return{"All Created Models": all_models}
+
+
+
+@app.delete("/delete_document")
+async def delete_document(document: str, modelName: str):
+    client = Client(host='llama')
+    try: 
+        client.show(modelName)
+    except:
+        return {"Message": f"Model {modelName} not found"}
+    path = f"/code/vector_documents/{modelName}"
+    modelpath = path
+    if not os.path.exists(path): return {"Message": f"Model {modelName} does not have any imported PDFs"}
+    path+= f"/{document}"
+    available_docs = os.listdir(modelpath)
+    if not os.path.exists(path): return {"Message": f"Document {document} does not exist", 
+        f"Available Documents For {modelName}": available_docs}
+    shutil.rmtree(path)
+    if not os.listdir(modelpath): shutil.rmtree(modelpath)
+    return {"Message": f"Document {document} sucessfully removed"}
+
+@app.delete("/deleteAll_Documents")
+async def deleteAll_Documents(modelName: str):
+    client = Client(host='llama')
+    try: 
+        client.show(modelName)
+    except:
+        return {"Message": f"Model {modelName} not found"}
+    path = f"/code/vector_documents/{modelName}"
+    if not os.path.exists(path): return {"Message": f"Model {modelName} does not have any imported PDFs"}
+    shutil.rmtree(path)
+    return {"Message": f"Successfully removed all documents for model {modelName}"}
+
+@app.delete("/deleteModel/{modelName}")
+async def deleteModel(modelName: str):
+    client = Client(host='llama')
+    try:
+        response = client.delete(model=modelName)
+        path = f"/code/vector_documents/{modelName}"
+        if os.path.exists(path):
+            shutil.rmtree(path)
+        return {"Message": f"Successfully deleted {modelName}"}
+    except ollama.ResponseError as e:
+        all_models = []
+        for model in client.list()["models"]:
+            all_models.append(model["name"][0:-7])
+        return {"Message": f"No model named {modelName}", "Created Models": all_models}
