@@ -11,41 +11,49 @@ from langchain_community.chat_models import ChatOllama
 from langchain_core.runnables import RunnablePassthrough
 from langchain.retrievers.multi_query import MultiQueryRetriever
 from fastapi.responses import JSONResponse
+from datasets import Dataset
+from transformers import AutoTokenizer, TrainingArguments, BitsAndBytesConfig, AutoModelForCausalLM
+from trl import SFTTrainer, SFTConfig
+from peft import LoraConfig
 from typing import List
 import os
 import shutil
+import torch
+import pandas as pd
+import ast
+import chromadb
+from chromadb import DEFAULT_TENANT, DEFAULT_DATABASE, Settings
 
 app = FastAPI()
 
+
+
 @app.post("/generate/{prompt}")
-async def llama(user_prompt: str, modelName: str, documents: List[str] = Query(None)):
+async def generate(user_prompt: str, modelName: str, documents: List[str] = Query(None)):
     client = Client(host='llama')
     try: 
         client.show(modelName)
     except:
         return {"Message": f"Model {modelName} not found"}
     if documents:
-        #embedding function will convert personal text to embeddings for specific model
         embedding_function=OllamaEmbeddings(model=modelName,  base_url = "http://llama:11434", show_progress=True)
-        directory_path = f"/code/vector_documents/{modelName}"
-        if not os.path.exists(directory_path):
-            return {"Mesaage": f"No documents saved for model {modelName}"}
-        length = len(directory_path)
+        client = chromadb.HttpClient(
+            host = "chromaDB",
+            port = 8000,
+            settings = Settings(allow_reset=True, anonymized_telemetry=False),
+            headers=None,
+            tenant = DEFAULT_TENANT,
+            database = DEFAULT_DATABASE,
+        )
         for document in documents:
-            directory_path += f"/{document}"
-            if not os.path.exists(directory_path):
-                directory_path = directory_path[:length]
-                dir_list = os.listdir(directory_path) 
-                return {"Message": f"Document {document} not imported", f"Available Documents For {modelName}": dir_list}
-            directory_path = directory_path[:length]
+            try:
+                client.get_collection(f"{document}{modelName}")
+            except:
+                return {"Message": f"Document {document} not imported for model {modelName}"}
         res = {}
         for document in documents:
-            directory_path += f"/{document}"
-            #connect to chroma db
-            db = Chroma(persist_directory= directory_path, embedding_function=embedding_function, collection_name="local-rag")
-            #connect to chose llm model
+            db = Chroma(client = client, embedding_function=embedding_function, collection_name= f"{document}{modelName}")            
             llm = ChatOllama(model=modelName,  base_url = "http://llama:11434")
-            #query prompt used for generating different perspectives of the given question
             QUERY_PROMPT = PromptTemplate(
                 input_variables=["question"],
                 template="""You are an AI language model assistant. Your task is to generate five
@@ -55,45 +63,38 @@ async def llama(user_prompt: str, modelName: str, documents: List[str] = Query(N
                 similarity search. Provide these alternative questions separated by newlines.
                 Original question: {question}""",
             )
-            #retrieves proper vectors in the db that gives llm proper context
             retriever = MultiQueryRetriever.from_llm(
                 db.as_retriever(), 
                 llm,
                 prompt=QUERY_PROMPT
             )
-            #The template given to llm for final question. Gives the context and answer
             template = """Answer the question based ONLY on the following context:
             {context}
             Question: {question}
             """
-            #converts template to appropriate prompt
+
             prompt = ChatPromptTemplate.from_template(template)
-            #user_prompt given as question, and context is the retriever
-            #then prompt utilized the question and context to generate proper prompt
-            #feed prompt to llm and then output it
             chain = (
             {"context": retriever, "question": RunnablePassthrough()}
             | prompt
             | llm
             | StrOutputParser()
             )
-            #call the chain
             response = chain.invoke(user_prompt)
             res[f"{document}.pdf"] = response
-            directory_path = directory_path[:length]
         return res
     try: 
         response = client.chat(model=modelName, messages=[
         {
             'role': 'user',
-            'content': prompt,
+            'content': user_prompt,
         }, ])
     except ollama.ResponseError as e:
         return e.error
     return {'message': response['message']['content']}
 
 @app.post("/createModel/{modelName}")
-async def createModel(baseModel: str, modelName: str, system: str = ""):
+async def createModel(modelName: str, system: str = "", baseModel: str = "llama3",):
     client = Client(host='llama')
     try: 
         client.show(modelName)
@@ -114,33 +115,43 @@ async def importDocument(modelName: str, file: UploadFile = File(...)):
         client.show(modelName)
     except:
         return {"Message": f"Model {modelName} not found"}
-    # Ensure the uploaded file is a PDF
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Invalid file type. Only PDF files are allowed.")
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="Invalid content type. Only PDF files are allowed.")
-    # Save the uploaded file to the specified path inside docker container
     try:
         file_name = file.filename
-        filepath = f"/code/app/{file_name}"
+        filepath = f"/code/{file_name}"
         with open(filepath, "wb") as f:
             f.write(await file.read())
     except Exception as e:
         return JSONResponse(status_code=500, content={"message": str(e)})
-    #load the file suitable for splitting and chunking
     loader = PyPDFLoader(file_path=filepath)
     data = loader.load()
-    #remove excessive \n
     data[0].page_content = data[0].page_content.replace('\n', ' ')
-    # Split and chunk 
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=7500, chunk_overlap=100)
     chunks = text_splitter.split_documents(data)
-    # Add to vector database and save to container
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    client = chromadb.HttpClient(
+        host = "chromaDB",
+        port = 8000,
+        settings = Settings(allow_reset=True, anonymized_telemetry=False),
+        headers=None,
+        tenant = DEFAULT_TENANT,
+        database = DEFAULT_DATABASE,
+    )
+    try:
+        client.get_collection(f"{file_name[:-4]}{modelName}")
+        return {"message": f"{modelName} has file {file_name[:-4]} already imported"}
+    except:
+        print("File is unique")
+    embeddings = OllamaEmbeddings(model=modelName,  base_url = "http://llama:11434", show_progress=True)
     doc_db = Chroma.from_documents(
+        client= client,
         documents=chunks, 
-        embedding=OllamaEmbeddings(model=modelName,  base_url = "http://llama:11434", show_progress=True),
-        collection_name="local-rag",
-        persist_directory= f"/code/vector_documents/{modelName}/{file_name[:-4]}"
+        embedding=embeddings,
+        collection_name= f"{file_name[:-4]}{modelName}",
+        collection_metadata = {"model": modelName, "file_name": file_name[:-4]}
     )
     os.remove(filepath)
     return {"Message": f"Sucessfully added document {file_name}"}
@@ -153,11 +164,21 @@ async def list_documents(modelName: str):
         client.show(modelName)
     except:
         return {"Message": f"Model {modelName} not found"}
-    path = f"/code/vector_documents/{modelName}"
-    if not os.path.exists(path):
-        return {"Mesaage": f"No documents saved for model {modelName}"}
-    dir_list = os.listdir(path) 
-    return{f"Imported Documents for {modelName}": dir_list}
+    client = chromadb.HttpClient(
+        host = "chromaDB",
+        port = 8000,
+        settings = Settings(allow_reset=True, anonymized_telemetry=False),
+        headers=None,
+        tenant = DEFAULT_TENANT,
+        database = DEFAULT_DATABASE,
+    )
+    cols = client.list_collections()
+    all_docs = []
+    for col in cols:
+        if col.metadata["model"] == modelName:
+            all_docs.append(col.metadata["file_name"])
+  
+    return{f"Imported Documents for {modelName}": all_docs}
 
 
 @app.post("/list_models")
@@ -177,16 +198,20 @@ async def delete_document(document: str, modelName: str):
         client.show(modelName)
     except:
         return {"Message": f"Model {modelName} not found"}
-    path = f"/code/vector_documents/{modelName}"
-    modelpath = path
-    if not os.path.exists(path): return {"Message": f"Model {modelName} does not have any imported documents"}
-    path+= f"/{document}"
-    available_docs = os.listdir(modelpath)
-    if not os.path.exists(path): return {"Message": f"Document {document} does not exist", 
-        f"Available Documents For {modelName}": available_docs}
-    shutil.rmtree(path)
-    if not os.listdir(modelpath): shutil.rmtree(modelpath)
-    return {"Message": f"Document {document} sucessfully removed"}
+    client = chromadb.HttpClient(
+        host = "chromaDB",
+        port = 8000,
+        settings = Settings(allow_reset=True, anonymized_telemetry=False),
+        headers=None,
+        tenant = DEFAULT_TENANT,
+        database = DEFAULT_DATABASE,
+    )
+    try:
+        client.get_collection(f"{document}{modelName}")
+        client.delete_collection(f"{document}{modelName}")
+    except:
+        return {"message": f"{modelName} does not have document {document} imported"}
+    return {"message": f"Successfully deleted document f{document} from model {modelName}"}
 
 @app.delete("/deleteAll_Documents")
 async def deleteAll_Documents(modelName: str):
@@ -195,9 +220,19 @@ async def deleteAll_Documents(modelName: str):
         client.show(modelName)
     except:
         return {"Message": f"Model {modelName} not found"}
-    path = f"/code/vector_documents/{modelName}"
-    if not os.path.exists(path): return {"Message": f"Model {modelName} does not have any imported documents"}
-    shutil.rmtree(path)
+    client = chromadb.HttpClient(
+        host = "chromaDB",
+        port = 8000,
+        settings = Settings(allow_reset=True, anonymized_telemetry=False),
+        headers=None,
+        tenant = DEFAULT_TENANT,
+        database = DEFAULT_DATABASE,
+    )
+    cols = client.list_collections()
+    for col in cols:
+        if col.metadata["model"] == modelName:
+            document = col.metadata["file_name"]
+            client.delete_collection(f"{document}{modelName}")
     return {"Message": f"Successfully removed all documents for model {modelName}"}
 
 @app.delete("/deleteModel/{modelName}")
@@ -205,12 +240,142 @@ async def deleteModel(modelName: str):
     client = Client(host='llama')
     try:
         response = client.delete(model=modelName)
-        path = f"/code/vector_documents/{modelName}"
-        if os.path.exists(path):
-            shutil.rmtree(path)
         return {"Message": f"Successfully deleted {modelName}"}
     except ollama.ResponseError as e:
         all_models = []
         for model in client.list()["models"]:
             all_models.append(model["name"][0:-7])
         return {"Message": f"No model named {modelName}", "Created Models": all_models}
+
+
+@app.post("/fine_tune_model/{modelName}")
+async def fine_tune_model(modelName: str, train_dataset: UploadFile = File(...), eval_dataset: UploadFile = File(...),
+            gradAcc: int = 50, lr: float = 2.0e-04, epochs: int = 1, packing: bool = True, batch_size: int = 1, 
+            gc: bool = True, rank: int = 32, lora_alpha: int = 64, lora_dropout: float = 0.1):
+    
+    tokenizer = AutoTokenizer.from_pretrained("./app/mistral-7B-v0.1")
+    client = Client(host='llama')
+    try: 
+        client.show(modelName)
+        return {"Message": f"Model Name {modelName} already exists"}
+    except:
+        print("User picked valid name")
+    if not train_dataset.filename.lower().endswith(".csv") or not eval_dataset.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Invalid file type. Only CSV files are allowed.")
+    if train_dataset.content_type != "text/csv" or  eval_dataset.content_type != "text/csv":
+        raise HTTPException(status_code=400, detail="Invalid content type. Only CSV files are allowed.")
+    try:
+        train_name = train_dataset.filename
+        filepath = f"/code/app/{train_name}"
+        with open(filepath, "wb") as f:
+            f.write(await train_dataset.read())
+        eval_name = eval_dataset.filename
+        filepath = f"/code/app/{eval_name}"
+        with open(filepath, "wb") as f:
+            f.write(await eval_dataset.read())
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
+    if tokenizer.pad_token_id is None:
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+    if tokenizer.model_max_length > 100_000:
+        tokenizer.model_max_length = 1024
+    tokenizer.padding_side = 'right'
+    tokenizer.chat_template = "{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %})" 
+    def apply_chat_template(example, tokenizer):
+        messages = example["messages"]
+        if messages[0]["role"] != "system":
+            messages.insert(0, {"role": "system", "content": ""})
+        example["text"] = tokenizer.apply_chat_template(messages, tokenize=False)
+        return example
+    train_pd = pd.read_csv(f'./app/{train_dataset.filename}')
+    eval_pd = pd.read_csv(f'./app/{eval_dataset.filename}')
+    train_pd['messages'] = train_pd['messages'].apply(ast.literal_eval)
+    eval_pd['messages'] = eval_pd['messages'].apply(ast.literal_eval)
+    train_dataset = Dataset.from_pandas(train_pd)
+    eval_dataset = Dataset.from_pandas(eval_pd)
+
+    train_dataset = train_dataset.map(apply_chat_template,
+        fn_kwargs={"tokenizer": tokenizer},
+        remove_columns=['messages'],
+        desc="Applying chat template",)
+    eval_dataset = eval_dataset.map(apply_chat_template,
+        fn_kwargs={"tokenizer": tokenizer},
+        remove_columns=['messages'],
+        desc="Applying chat template",)
+
+    training_args = SFTConfig(
+        fp16=True, 
+        do_eval=True,
+        eval_strategy="epoch",
+        gradient_accumulation_steps=gradAcc, 
+        gradient_checkpointing=gc, 
+        gradient_checkpointing_kwargs={"use_reentrant": False},
+        learning_rate=lr,
+        log_level="info",
+        logging_steps=1, 
+        logging_strategy="steps",
+        lr_scheduler_type="cosine", 
+        max_steps=-1, 
+        num_train_epochs=epochs,
+        output_dir="qlora_downloaded",
+        overwrite_output_dir=True,
+        per_device_eval_batch_size=batch_size, 
+        per_device_train_batch_size=batch_size, 
+        save_total_limit=None,
+        seed=42,
+        dataset_text_field = "text",
+        max_seq_length=tokenizer.model_max_length,
+        packing = packing
+    )
+
+    peft_config = LoraConfig(
+        r=rank, 
+        lora_alpha=lora_alpha, 
+        lora_dropout=lora_dropout,
+        bias="none",
+        task_type="CAUSAL_LM",
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj"], 
+    )
+    quantization_config = BitsAndBytesConfig(
+        load_in_4bit=True, 
+        bnb_4bit_quant_type="nf4", 
+        bnb_4bit_compute_dtype= torch.bfloat16, 
+    )
+    device_map = {"": torch.cuda.current_device()} if torch.cuda.is_available() else None
+
+    model = AutoModelForCausalLM.from_pretrained("app/mistral-7b-v0.1", device_map = device_map, 
+                    local_files_only = True, quantization_config = quantization_config, torch_dtype = 'auto')
+    
+    trainer = SFTTrainer(
+            model=model, 
+            args=training_args,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            tokenizer=tokenizer,
+            peft_config=peft_config
+        )
+    trainer.train()
+    trainer.save_model("qlora")
+
+    with open("./app/Modelfile.txt", "r") as file:
+        modelfile = file.read()
+    print(modelfile) 
+
+    os.system("python ./app/llama.cpp/convert-hf-to-gguf.py app/mistral-7b-v0.1 --outfile ./app/mistral-7b-v0.1.gguf --outtype f16")
+    os.system("python ./app/llama.cpp/convert-lora-to-ggml.py qlora")
+    os.system("./app/llama.cpp/export-lora -m ./app/mistral-7b-v0.1.gguf -o ./app/shared/finetunedModel.gguf -l ./qlora/ggml-adapter-model.bin")
+    os.system("./app/llama.cpp/quantize ./app/shared/finetunedModel.gguf ./app/shared/finetunedModel-q4.gguf Q4_K_M")
+    
+    os.system(f"rm -rf ./app/{train_name}")
+    os.system(f"rm -rf ./app/{eval_name}")
+    os.system("rm -rf qlora")
+    os.system("rm -rf qlora_downloaded")
+    os.system("rm -rf ./app/mistral-7b-v0.1.gguf")
+    os.system("rm -rf ./app/shared/finetunedModel.gguf")
+    try:
+        client.create(model=modelName, modelfile=modelfile)
+        os.system("rm -rf ./app/shared/finetunedModel-q4.gguf")
+        return {"Message": f"Sucessfully finetuned model {modelName}"}
+    except ollama.ResponseError as e:
+        os.system("rm -rf ./app/shared/finetunedModel-q4.gguf")
+        return e.error

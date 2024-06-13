@@ -1,0 +1,15 @@
+FROM "/code/finetunedModel-q4.gguf"
+
+TEMPLATE """{{- if .System }}<|im_start|>system 
+{{ .System }}<|im_end|>
+{{end}}
+<|im_start|>user
+{{ .Prompt }}<|im_end|>
+<|im_start|>assistant
+"""
+
+SYSTEM """"""
+
+PARAMETER stop <|im_start|>
+PARAMETER stop </s>
+PARAMETER stop <|im_end|>

@@ -1,4 +1,3 @@
-version: '3.4' #docker version 3.4
 services:
   fastapi:
     build: #building the image using Dockerfile
@@ -7,13 +6,22 @@ services:
     container_name: fastapi
     volumes: #changes in current directory will affect app directory in container
       - .:/code/app
-      - ./vector_documents:/code/vector_documents
     environment: #environmental variables
       NODE_ENV: development
       DATABASE_URL: mysql://root:S3cret@db:3306/pdf
     ports: #expose port 3000 for outside use
       - 3000:80
-  #if no exposed ports, anything outside of the docker network can't access it
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    # depends_on:
+    #   - chromaDB
+    restart: on-failure:10"
+  # if no exposed ports, anything outside of the docker network can't access it
   llama:
     build: #build ollama image
       context: .
@@ -26,6 +34,14 @@ services:
       - 11434:11434
     volumes:
       - ./ollama_cache:/root/.ollama 
+      - ./shared:/code/
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
   stream:
     build:
       context: .
@@ -46,5 +62,13 @@ services:
         - OLLAMA_BASE_URL=http://llama:11434
         - HOST = llama
      restart: unless-stopped
+  chromaDB:
+    image: ghcr.io/chroma-core/chroma:latest
+    container_name: chromaDB
+    volumes:
+      - ./vectorDB:/chroma/chroma
+    ports:
+      - 8000:8000
+    
 volumes:
   open-webui:

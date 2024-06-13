@@ -1,6 +1,6 @@
 #!/bin/bash
 
-rm -r "./vector_documents"
-mkdir "vector_documents"
+rm -r "./vectorDB"
+mkdir "vectorDB"
 echo "Vector DB is cleaned"
 
