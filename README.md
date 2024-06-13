@@ -52,7 +52,7 @@ Deletes all documents for a given model. Does so by deleting all documents that 
 ### generate
 This will generate a response from the given model, prompt, and optionally a list of documents. If not documents are listed, the API will simply connect to the ollama container, and pass in a prompt and the modelName, then return the response of the model. Otherwise, the API will use langchain's multi-query retriever to grab the most relevant vectors of each listed document, from chromaDb, to help answer the prompt. This is the Retreival Augmentation Generation system. 
 ### fine_tune_model
-**To fully understand what is about to be said, please read about these topics below: Lora, Quantization, Finetuning Params, Chat Templates, the Llama.cpp Repository, Dataset formatting**
+**To fully understand what is about to be said, please read about these topics below: Lora, Quantization, Finetuning Params, the Llama.cpp Repository, Dataset formatting**
 The fine_tune model takes in three required parameters: a training csv dataset, an evaluation csv dataset, and the modelName. There are 9 additional preset parameters that
 specify how the model will train: gradient accumulation steps, gradient checkpointing, epochs, learning rate, lora rank, lora alpha, lora dropout, packing, and batch size. 
 The first steps of the finetuning api is to format the dataset in chatML form. After doing so, we set up the training arguements, and this is where 6/9 parameters will be placed. Then, we will set up the peft configurations, and this is where the Lora parameters Rank, Alpha, and Dropout will be placed. We then will load in mistral-7b-v0.1 as our base model in a 4bit quantized form. Finally, we can train our model. After training is complete, the finetuned model will be saved in the folder named qlora(quantized LORA). Note that the qlora folder will only contain the trained Lora adapters rather than the full finetuned model.  
@@ -78,6 +78,18 @@ LoRA addresses this issue by representing the gradients with two smaller matrice
 ### Finetuning Parameters
 There are hundreds of finetuning parameters for the trl library. Please refer to this page in the trainingArguements section to learn what each parameter does: https://huggingface.co/docs/transformers/main_classes/trainer. Note that the finetuning API call takes in 9 finetuning parameters, and it is likely more will need to be added.
 
-
-
+### Llama.cpp Repository
+The Llama.cpp repository is a versatile tool that facilitates several key tasks for working with models. It allows users to:  
+  
+Convert LoRA adapters to .ggml files.  
+Convert base Huggingface models to .gguf files. 
+Merge .ggml files into .gguf files, resulting in a final fine-tuned model in .gguf format.  
+Quantize .gguf files.  
+These conversions are essential because Ollama servers require models to be in .gguf format and do not support the typical Huggingface model structure, which includes .safetensors and .json files.  
+  
+The Llama.cpp folder in this repository was cloned from an older version of the repository (https://github.com/ggerganov/llama.cpp/tree/04a5ac211ef40936295980b7cdf0ba6e97093146) to retain the convert-lora-to-ggml.py script, which newer versions have removed. This script converts LoRA adapters to .ggml files.  
+  
+Alternatively, instead of using convert-lora-to-ggml.py, you can use the merge_and_unload function from the Peft library to merge the base model with LoRA adapters, producing a Huggingface-formatted model. This merged model can then be converted to a .gguf file using convert-hf-to-gguf.py.  
+  
+By following these steps, you can ensure compatibility with Ollama servers and leverage the full capabilities of your fine-tuned models.  
 
