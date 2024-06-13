@@ -1,10 +1,10 @@
 # LLM-FastAPI
 This project utilizes Docker to implement multiple API endpoints that allow for creating customizable LLMs.
-Some of the key frameworks/modules/repositories that were used to make this possible were: 
-FastAPI - the API framework
-Langchain - preprocessing imported documents and multi-query retrieval(RAG)
-ChromaDB - storing imported documents in vector form
-TRL - finetuning mistral-7b-v0.1
+Some of the key frameworks/modules/repositories that were used to make this possible were: \n
+FastAPI - the API framework \n
+Langchain - preprocessing imported documents and multi-query retrieval(RAG) \n
+ChromaDB - storing imported documents in vector form \n
+TRL - finetuning mistral-7b-v0.1 \n
 Pytorch - dependancy for TRL 
 Peft - using LORA Adapters for memory conservation 
 Ollama - storage for customized LLMs
@@ -60,15 +60,23 @@ Ollama can only import models in the form of .gguf files, so this is where llama
 # Topics to Understand Finetuning Components
 ## Quantization
 Due to GPU and RAM constraints, loading billion parameter models in 16 bit precision is not feasible. To mitigate space constraints, we utilize quantization, which refers to the process of reducing the precision of number used to represent the model's parameters. In the current implementation of the finetuning API call, 4 bit quantization is used. If one is able to afford a finer precision in the bit representation of the parameters, they are able to change the quantization configurations for when pulling mistral-7b-v0.1.
-For example: quantization_config = BitsAndBytesConfig(load_in_4bit=True) ->  quantization_config = BitsAndBytesConfig(load_in_8bit=True). This will allow training to be more precise. Furthmore, when quantizing the final finetuned model, specify a lower quantization setting. For example:
-./app/llama.cpp/quantize ./app/shared/finetunedModel.gguf ./app/shared/finetunedModel-q4.gguf Q4_K_M" <- change Q4_K_M to your preference, options available in llama.cpp repository 
+
+For example: quantization_config = BitsAndBytesConfig(load_in_4bit=True) ->  quantization_config = BitsAndBytesConfig(load_in_8bit=True). 
+
+This will allow training to be more precise. Furthmore, when quantizing the final finetuned model, specify a lower quantization setting. 
+
+For example:
+./app/llama.cpp/quantize ./app/shared/finetunedModel.gguf ./app/shared/finetunedModel-q4.gguf Q4_K_M" 
+Change Q4_K_M to your preference, options available in llama.cpp repository. 
+
 This will allow for the final finetuned model to have better performance but at the cost of memory.
 ## Lora
 Low Rank Adaptation (LoRA) is a lightweight method for fine-tuning large language models. In essence, all trainable weights of a model can be represented as a matrix. For instance, consider a model with 10 billion parameters, which would correspond to a 100,000 x 100,000 matrix. During backpropagation, the gradients also need to be stored in a 100,000 x 100,000 matrix. This poses a significant memory challenge.
 
-LoRA addresses this issue by representing the gradients with two smaller matrices instead of one large matrix. Specifically, instead of using a 100,000 x 100,000 matrix, we use two matrices: A (100,000 x R) and B (R x 100,000). The product of matrices A and B reconstructs the original 100,000 x 100,000 matrix. This approach reduces memory requirements because if R is relatively small, both matrices A and B together will have fewer total elements than the original matrix. This way, LoRA effectively reduces the memory footprint while preserving the model's ability to learn and adapt.
+LoRA addresses this issue by representing the gradients with two smaller matrices instead of one large matrix. Specifically, instead of using a 100,000 x 100,000 matrix, we use two matrices: A (100,000 x R) and B (R x 100,000). The product of matrices A and B reconstructs the original 100,000 x 100,000 matrix. This approach reduces memory requirements because if R is relatively small, both matrices A and B together will have fewer total elements than the original matrix. This way, LoRA effectively reduces the memory footprint while preserving the model's ability to learn and adapt. R is refered to as "rank", and this is found as one of the hyperparameters for finetuning. As one increases rank, memory use will increase for storing gradients, but precision of representing gradients will also increase. Lora Alpha is another hyperparameter, and this indicates the scaling factor for the weight matrices.  
 
-In the finetuning API call, 
+## Finetuning Parameters
+There are hundreds of finetuning parameters for the trl library. Please refer to this page in the trainingArguements section to learn what each parameter does: https://huggingface.co/docs/transformers/main_classes/trainer. Note that the finetuning API call takes in 9 finetuning parameters, and it is likely more will need to be added.
 
 
 
