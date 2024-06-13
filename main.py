@@ -250,8 +250,8 @@ async def deleteModel(modelName: str):
 
 @app.post("/fine_tune_model/{modelName}")
 async def fine_tune_model(modelName: str, train_dataset: UploadFile = File(...), eval_dataset: UploadFile = File(...),
-            gradAcc: int = 50, lr: float = 2.0e-04, epochs: int = 1, packing: bool = True, batch_size: int = 1, 
-            gc: bool = True, rank: int = 32, lora_alpha: int = 64, lora_dropout: float = 0.1):
+            gradAcc: int = 50, lr: float = 2.0e-05, epochs: int = 1, packing: bool = True, batch_size: int = 1, 
+            gc: bool = True, rank: int = 24, lora_alpha: int = 48, lora_dropout: float = 0.1):
     
     tokenizer = AutoTokenizer.from_pretrained("./app/mistral-7B-v0.1")
     client = Client(host='llama')
