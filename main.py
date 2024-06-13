@@ -359,7 +359,6 @@ async def fine_tune_model(modelName: str, train_dataset: UploadFile = File(...),
 
     with open("./app/Modelfile.txt", "r") as file:
         modelfile = file.read()
-    print(modelfile) 
 
     os.system("python ./app/llama.cpp/convert-hf-to-gguf.py app/mistral-7b-v0.1 --outfile ./app/mistral-7b-v0.1.gguf --outtype f16")
     os.system("python ./app/llama.cpp/convert-lora-to-ggml.py qlora")
