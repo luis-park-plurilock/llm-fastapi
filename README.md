@@ -62,11 +62,12 @@ Ollama can only import models in the form of .gguf files, so this is where llama
 ### Quantization
 Due to GPU and RAM constraints, loading billion parameter models in 16 bit precision is not feasible. To mitigate space constraints, we utilize quantization, which refers to the process of reducing the precision of number used to represent the model's parameters. In the current implementation of the finetuning API call, 4 bit quantization is used. If one is able to afford a finer precision in the bit representation of the parameters, they are able to change the quantization configurations for when pulling mistral-7b-v0.1.  
   
-For example: quantization_config = BitsAndBytesConfig(load_in_4bit=True) ->  quantization_config = BitsAndBytesConfig(load_in_8bit=True).   
+For example:   
+quantization_config = BitsAndBytesConfig(load_in_4bit=True) ->  quantization_config = BitsAndBytesConfig(load_in_8bit=True).   
   
 This will allow training to be more precise. Furthmore, when quantizing the final finetuned model, specify a lower quantization setting.   
   
-For example:
+For example:  
 ./app/llama.cpp/quantize ./app/shared/finetunedModel.gguf ./app/shared/finetunedModel-q4.gguf Q4_K_M"   
 Change Q4_K_M to your preference, options available in llama.cpp repository.   
   
