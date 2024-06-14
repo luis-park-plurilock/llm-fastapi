@@ -103,4 +103,37 @@ As you can see, the API supports a continuous stream of prompt and responses fro
 Also, note that if the training process is unusually fast and the dataset is relatively small (1000-5000 examples) with short examples, set **packing** to False. Packing combines smaller examples, significantly reducing the dataset size. For instance, I once set packing to True for a dataset with 1000 examples. Although the model trained quickly, it resulted in minimal learning. The finetuned model showed no improvement over the pretrained model. After extensive debugging, I discovered that packing had reduced my dataset from 1000 examples to just 26, leaving insufficient data for effective training. While packing is beneficial for large datasets, it should be avoided for smaller ones.
 
 
+# Future Progression
+### Llama.cpp
+If, the current commit of the Llama.cpp repository is out of date and one wishes to pull a fresh commit, please do the following:  
+1. Delete the current Llama.cpp repository 
+2. Git clone a newer version of the repository: https://github.com/ggerganov/llama.cpp.git
+3. Compile the repository by either using 'make' or 'cmake'
+4. Create another folder and move all content in the Llama.cpp repository in the newly created folder
+5. Delete the empty Llama.cpp repository
+6. Rename the newly created folder to Llama.cpp
+7. If the new Llama.cpp is over 100MB, delete a few unused files (GitHub doesn't allow users to push folders over 100MB)  
+  
+The reason for copying all contents to a newly created folder is to avoid issues with submodules in GitHub. When cloning a project that includes the Llama.cpp repository as a submodule, the Llama.cpp folder may not be pulled correctly. By copying all files to a new folder and pushing that folder to GitHub, this issue is circumvented.  If there is a more efficient method, please feel free to adjust the steps accordingly, as my limited knowledge of Git has led me to this approach.  
+   
+If the latest commit of the freshly cloned Llama.cpp repository does not include the convert-lora-to-ggml.py file, you can still proceed after training the LoRA adapters. Simply use the merge_and_unload function from the Peft library to merge the LoRA adapters with the base model Mistral-7b-v0.1. After merging, convert the resulting model directly to a .gguf file, bypassing the need for a .ggml file.  
+For example:   
+  
+trainer.train()  
+trainer.save_model("qlora") #saving trained model to qlora folder  
+base = AutoModelForCausalLM.from_pretrained("app/mistral-7b-v0.1", .....)  
+model = PeftModel.from_pretrained(base, "qlora")  
+merged_model = model.merge_and_unload() #merge adapters with base  
+merged_model.save_pretrained("path")  
+os.system("python ./app/llama.cpp/convert-hf-to-gguf.py path --outfile ./app/finetuned.gguf --outtype f16")  
+  
+
+### Changing Finetuning Model
+If one wants to change the finetuning model, please do the following:  
+1. In the load_baseModel.py, change the repo id to the repository of the preferred finetuned model
+2. In the fintuned FastAPI call, change the both the tokenizer and AutoModelForCausalLM path to where the saved model is located
+3. **You must change the chat template to the one it was trained on**, you can the template on the Huggingface website
+4. In the finetuned FastAPI call, change the os.system calls to the appropriate path as well
+
+
 

@@ -1,4 +1,4 @@
 messages
-"[{""content"": ""Does happiness truly exist?"", ""role"": ""user""}, {""content"": ""Yes it does!"", ""role"": ""assistant""}]"
-"[{""content"": ""Why do bad things happen?"", ""role"": ""user""}, {""content"": ""Bad things happen because of accidents"", ""role"": ""assistant""}]"
-"[{""content"": ""Is there any justice in the world?"", ""role"": ""user""}, {""content"": ""Justice is found everywhere."", ""role"": ""assistant""}]"
+"[{""content"": ""Hi, how are you?"", ""role"": ""user""}, {""content"": ""I am doing good, thanks for asking!"", ""role"": ""assistant""}]"
+"[{""content"": ""What is the biggest planet in our solar system?"", ""role"": ""user""}, {""content"": ""Jupyter!"", ""role"": ""assistant""}]"
+"[{""content"": ""I am tired"", ""role"": ""user""}, {""content"": ""You should get some sleep then."", ""role"": ""assistant""}]"
