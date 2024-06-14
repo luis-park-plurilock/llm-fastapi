@@ -1,6 +1,7 @@
 # LLM-FastAPI
 This project utilizes Docker to implement multiple API endpoints that allow for creating customizable LLMs.
 Some of the key frameworks/modules/repositories that were used to make this possible were:  
+  
 **FastAPI** - the API framework  
 **Langchain** - preprocessing imported documents and multi-query retrieval(RAG)  
 **ChromaDB** - storing imported documents in vector form  
@@ -104,8 +105,9 @@ Also, note that if the training process is unusually fast and the dataset is rel
 
 
 # Future Progression
-### Llama.cpp
+### Fresh Llama.cpp Repo
 If, the current commit of the Llama.cpp repository is out of date and one wishes to pull a fresh commit, please do the following:  
+    
 1. Delete the current Llama.cpp repository 
 2. Git clone a newer version of the repository: https://github.com/ggerganov/llama.cpp.git
 3. Compile the repository by either using 'make' or 'cmake'
@@ -130,10 +132,21 @@ os.system("python ./app/llama.cpp/convert-hf-to-gguf.py path --outfile ./app/fin
 
 ### Changing Finetuning Model
 If one wants to change the finetuning model, please do the following:  
+  
 1. In the load_baseModel.py, change the repo id to the repository of the preferred finetuned model
 2. In the fintuned FastAPI call, change the both the tokenizer and AutoModelForCausalLM path to where the saved model is located
-3. **You must change the chat template to the one it was trained on**, you can the template on the Huggingface website
+3. **You must change the chat template to the one it was trained on**, you can find the template on the Huggingface website
 4. In the finetuned FastAPI call, change the os.system calls to the appropriate path as well
 
 
-
+# Addtional Notes
+### Persistence of Data
+In this repository, there are two folders that allow the persistence of data: vectorDB and ollama_cache. vectorDB will contain the data of imported documents, and ollama_cache will contain created models. There are .gitignore files placed in these folders because GitHub does not allow pushing folders of 100MB or bigger: these folders scale extremely fast.
+### entrypoint.sh
+When the Ollama container initially runs, it must first start the Ollama server and then pull Llama3. The Ollama image is designed to launch the Ollama server upon container startup. Initially, a RUN [pull llama3] command was added to the Dockerfile, but this caused a race condition. If the Ollama server wasn't fully initialized before the pull command executed, the command would fail and break the container.  
+  
+To resolve this, an entrypoint script (.sh file) was implemented for the Ollama container. This script starts the Ollama server and enters a while loop, continuously checking until the server is fully initialized. Once the server is ready, it pulls Llama3 and then enters an infinite loop. This ensures the entrypoint process remains active, keeping the container running until manually stopped.
+### Unused Llama.cpp Files
+The Llama.cpp directory is quite large, and many of its files are not essential for this project. To conserve disk space when running the containers, you can delete unused files. However, exercise caution because the necessary files have many dependencies within the Llama.cpp folder. I have opted not to delete a significant number of files due to uncertainty about their associations and to avoid potential issues.
+### ChromaDB Setup
+ChromaDB serves as a powerful vector database tailored for efficiently handling and querying extensive collections of vector embeddings. Its architecture revolves around organizing these embeddings into distinct units termed "collections." In our project's implementation, each imported document is treated as an individual collection within ChromaDB. However, it's worth noting that the system supports the aggregation of multiple documents into a single collection if desired. Should this be the preferred approach, adjustments to the importDocument API implementation can be made accordingly.
