@@ -12,11 +12,9 @@ Some of the key frameworks/modules/repositories that were used to make this poss
 **BitsandBytes** - quantization of weights for memory conservation  
 **Llama.cpp** - converting finetuned models to gguf format for Ollama compatibility  
 ### Hardware Requirements
-As you would know, LLMs contain billions of tunable parameters, so components such as RAM and VRAM must be plentiful.
-Furthermore, training billion parameter models are only comprehensible through utilizing a GPU rather than a CPU. Therefore, a GPU will be needed.
-First, to appropriately use this project, a Nvidia GPU and Driver is required. Also, the Nvidia Container Toolkit must be installed
+To appropriately use this project, a Nvidia GPU and Driver is required. Also, the Nvidia Container Toolkit must be installed
 for the ability to use the GPU in the docker containers. Nvidia Container Toolkit must be compatible with the OS and Nvidia Driver that is 
-installed. Compatibility documentation can be found here: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/1.11.0/install-guide.html
+installed. Compatibility documentation can be found here: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/1.11.0/install-guide.html.
 It is highly recommended that the device running the Docker Containers to have a minimum of 24 gigabytes RAM and and 24 gigabytes VRAM, otherwise, the finetuning 
 api call will be prone to an OOM error. 
 ### LLMs
@@ -27,9 +25,8 @@ if need be, create a huggingface account and get an access token for the login(r
 for your local environment. The reason for local installation of these models is because downloading these models when the API is called is extremely slow (30 minutes), 
 so pulling these models locally greatly reduces download time. 
 
-### .sh Files
-The clean_ollama_cache.sh file will delete all created models in your local environment. The clean_vectorDB will delete all imported documents from your local environment.
-The entrypoint.sh file is used for the ollama container to download Llama3 when the docker container runs. 
+### Initial Load Up
+When initially running the docker compose file, please wait for the Ollama container to fully download and pull Llama3. The first time running the docker compose file will be slow due to the size of the llama3 model(around 7-8 minutes). After it pulls llama3 for the first time, the model will be placed in the ollama_cache folder. This in result will make future load times much faster. 
 
 # FastAPI Endpoints
 ### createModel

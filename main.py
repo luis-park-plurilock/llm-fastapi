@@ -103,8 +103,8 @@ async def createModel(modelName: str, system: str = "", baseModel: str = "llama3
         print("User picked valid name")
     modelfile = f'''FROM {baseModel}\nSYSTEM {system}'''
     try:
-        response = client.create(model=modelName, modelfile=modelfile)
-        return response
+        client.create(model=modelName, modelfile=modelfile)
+        return  {"Message": f"Successfully created {modelName}"}
     except ollama.ResponseError as e:
         return e.error
 
@@ -116,9 +116,9 @@ async def importDocument(modelName: str, file: UploadFile = File(...)):
     except:
         return {"Message": f"Model {modelName} not found"}
     if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Invalid file type. Only PDF files are allowed.")
+        return {"Message": f"Please import a PDF"}
     if file.content_type != "application/pdf":
-        raise HTTPException(status_code=400, detail="Invalid content type. Only PDF files are allowed.")
+        return {"Message": f"Please import a PDF"}
     try:
         file_name = file.filename
         filepath = f"/code/{file_name}"
@@ -157,7 +157,7 @@ async def importDocument(modelName: str, file: UploadFile = File(...)):
     return {"Message": f"Sucessfully added document {file_name}"}
 
 
-@app.post("/list_documents/")
+@app.get("/list_documents/")
 async def list_documents(modelName: str):
     client = Client(host='llama')
     try: 
@@ -181,7 +181,7 @@ async def list_documents(modelName: str):
     return{f"Imported Documents for {modelName}": all_docs}
 
 
-@app.post("/list_models")
+@app.get("/list_models")
 async def list_models():
     client = Client(host='llama')
     all_models = []
@@ -211,7 +211,7 @@ async def delete_document(document: str, modelName: str):
         client.delete_collection(f"{document}{modelName}")
     except:
         return {"message": f"{modelName} does not have document {document} imported"}
-    return {"message": f"Successfully deleted document f{document} from model {modelName}"}
+    return {"message": f"Successfully deleted document {document} from model {modelName}"}
 
 @app.delete("/deleteAll_Documents")
 async def deleteAll_Documents(modelName: str):
@@ -239,7 +239,7 @@ async def deleteAll_Documents(modelName: str):
 async def deleteModel(modelName: str):
     client = Client(host='llama')
     try:
-        response = client.delete(model=modelName)
+        client.delete(model=modelName)
         return {"Message": f"Successfully deleted {modelName}"}
     except ollama.ResponseError as e:
         all_models = []
