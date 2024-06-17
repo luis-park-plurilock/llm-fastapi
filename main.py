@@ -131,7 +131,6 @@ async def importDocument(modelName: str, file: UploadFile = File(...)):
     data[0].page_content = data[0].page_content.replace('\n', ' ')
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=7500, chunk_overlap=100)
     chunks = text_splitter.split_documents(data)
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     client = chromadb.HttpClient(
         host = "chromaDB",
         port = 8000,
@@ -146,7 +145,7 @@ async def importDocument(modelName: str, file: UploadFile = File(...)):
     except:
         print("File is unique")
     embeddings = OllamaEmbeddings(model=modelName,  base_url = "http://llama:11434", show_progress=True)
-    doc_db = Chroma.from_documents(
+    Chroma.from_documents(
         client= client,
         documents=chunks, 
         embedding=embeddings,
@@ -280,7 +279,10 @@ async def fine_tune_model(modelName: str, train_dataset: UploadFile = File(...),
     if tokenizer.model_max_length > 100_000:
         tokenizer.model_max_length = 1024
     tokenizer.padding_side = 'right'
-    tokenizer.chat_template = "{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %})" 
+    tokenizer.chat_template = "{% if not add_generation_prompt is defined %}{% set \
+    add_generation_prompt = false %}{% endif %}{% for message in messages %}{{'<|im_start|>' \
+    + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if \
+    add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %})" 
     def apply_chat_template(example, tokenizer):
         messages = example["messages"]
         if messages[0]["role"] != "system":
@@ -302,7 +304,8 @@ async def fine_tune_model(modelName: str, train_dataset: UploadFile = File(...),
         fn_kwargs={"tokenizer": tokenizer},
         remove_columns=['messages'],
         desc="Applying chat template",)
-
+    print(train_dataset["text"][0])
+    print(eval_dataset["text"][0])
     training_args = SFTConfig(
         fp16=True, 
         do_eval=True,

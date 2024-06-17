@@ -95,8 +95,10 @@ By following these steps, you can ensure compatibility with Ollama servers and l
 
 ### Dataset Requirements
 The datasets passed into the finetuning API **must** be in this format:   
+'''
 "[{""content"": ""prompt1"", ""role"": ""user""}, {""content"": ""response1"", ""role"": ""assistant""} , ....]"  
 "[{""content"": ""prompt2"", ""role"": ""user""}, {""content"": ""response2"", ""role"": ""assistant""}, ....]"  
+'''
 As you can see, the API supports a continuous stream of prompt and responses from the user and assistant. Make sure that there are no other keys other than "content" and "role". Furthermore, the value for "role" should only be "assistant" or "user". Please refer to the dummy dataset in the repository to clear any confusions.   
   
 Also, note that if the training process is unusually fast and the dataset is relatively small (1000-5000 examples) with short examples, set **packing** to False. Packing combines smaller examples, significantly reducing the dataset size. For instance, I once set packing to True for a dataset with 1000 examples. Although the model trained quickly, it resulted in minimal learning. The finetuned model showed no improvement over the pretrained model. After extensive debugging, I discovered that packing had reduced my dataset from 1000 examples to just 26, leaving insufficient data for effective training. While packing is beneficial for large datasets, it should be avoided for smaller ones.
