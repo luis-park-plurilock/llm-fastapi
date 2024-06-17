@@ -65,8 +65,8 @@ quantization_config = BitsAndBytesConfig(load_in_4bit=True) ->  quantization_con
 This will allow training to be more precise. Furthmore, when quantizing the final finetuned model, specify a lower quantization setting.   
   
 For example:  
-./app/llama.cpp/quantize ./app/shared/finetunedModel.gguf ./app/shared/finetunedModel-q4.gguf Q4_K_M"   
-Change Q4_K_M to your preference, options available in llama.cpp repository.   
+    ./app/llama.cpp/quantize ./app/shared/finetunedModel.gguf ./app/shared/finetunedModel-q4.gguf Q4_K_M"   
+    #Change Q4_K_M to your preference, options available in llama.cpp repository.   
   
 This will allow for the final finetuned model to have better performance but at the cost of memory.  
 ### Lora
@@ -121,14 +121,14 @@ The reason for copying all contents to a newly created folder is to avoid issues
 If the latest commit of the freshly cloned Llama.cpp repository does not include the convert-lora-to-ggml.py file, you can still proceed after training the LoRA adapters. Simply use the merge_and_unload function from the Peft library to merge the LoRA adapters with the base model Mistral-7b-v0.1. After merging, convert the resulting model directly to a .gguf file, bypassing the need for a .ggml file.  
 For example:   
   
-trainer.train()  
-trainer.save_model("qlora") #saving trained model to qlora folder  
-base = AutoModelForCausalLM.from_pretrained("app/mistral-7b-v0.1", .....)  
-model = PeftModel.from_pretrained(base, "qlora")  
-merged_model = model.merge_and_unload() #merge adapters with base  
-merged_model.save_pretrained("path")  
-os.system("python ./app/llama.cpp/convert-hf-to-gguf.py path --outfile ./app/finetuned.gguf --outtype f16")  
-  
+    trainer.train()  
+    trainer.save_model("qlora") #saving trained model to qlora folder  
+    base = AutoModelForCausalLM.from_pretrained("app/mistral-7b-v0.1", .....)  
+    model = PeftModel.from_pretrained(base, "qlora")  
+    merged_model = model.merge_and_unload() #merge adapters with base  
+    merged_model.save_pretrained("path")  
+    os.system("python ./app/llama.cpp/convert-hf-to-gguf.py path --outfile ./app/finetuned.gguf --outtype f16")  
+    
 
 ### Changing Finetuning Model
 If one wants to change the finetuning model, please do the following:  
