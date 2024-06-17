@@ -65,6 +65,7 @@ quantization_config = BitsAndBytesConfig(load_in_4bit=True) ->  quantization_con
 This will allow training to be more precise. Furthmore, when quantizing the final finetuned model, specify a lower quantization setting.   
   
 For example:  
+   
     ./app/llama.cpp/quantize ./app/shared/finetunedModel.gguf ./app/shared/finetunedModel-q4.gguf Q4_K_M"   
     #Change Q4_K_M to your preference, options available in llama.cpp repository.   
   
