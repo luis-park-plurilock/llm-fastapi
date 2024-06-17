@@ -28,7 +28,7 @@ app = FastAPI()
 
 
 
-@app.post("/generate/{prompt}")
+@app.post("/generate")
 async def generate(user_prompt: str, modelName: str, documents: List[str] = Query(None)):
     client = Client(host='llama')
     try: 
@@ -94,7 +94,7 @@ async def generate(user_prompt: str, modelName: str, documents: List[str] = Quer
     return {'message': response['message']['content']}
 
 @app.post("/createModel/{modelName}")
-async def createModel(modelName: str, system: str = "", baseModel: str = "llama3",):
+async def createModel(modelName: str, system: str = "", baseModel: str = "llama3"):
     client = Client(host='llama')
     try: 
         client.show(modelName)
@@ -260,9 +260,9 @@ async def fine_tune_model(modelName: str, train_dataset: UploadFile = File(...),
     except:
         print("User picked valid name")
     if not train_dataset.filename.lower().endswith(".csv") or not eval_dataset.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Invalid file type. Only CSV files are allowed.")
+        return {"Message": f"Please import a CSV"}
     if train_dataset.content_type != "text/csv" or  eval_dataset.content_type != "text/csv":
-        raise HTTPException(status_code=400, detail="Invalid content type. Only CSV files are allowed.")
+        return {"Message": f"Please import a CSV"}
     try:
         train_name = train_dataset.filename
         filepath = f"/code/app/{train_name}"
@@ -304,8 +304,6 @@ async def fine_tune_model(modelName: str, train_dataset: UploadFile = File(...),
         fn_kwargs={"tokenizer": tokenizer},
         remove_columns=['messages'],
         desc="Applying chat template",)
-    print(train_dataset["text"][0])
-    print(eval_dataset["text"][0])
     training_args = SFTConfig(
         fp16=True, 
         do_eval=True,

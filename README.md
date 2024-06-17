@@ -90,7 +90,7 @@ LoRA addresses this issue by representing the gradients with two smaller matrice
 There are hundreds of finetuning parameters for the trl library. Please refer to this page in the trainingArguements section to learn what each parameter does: https://huggingface.co/docs/transformers/main_classes/trainer. Note that the finetuning API call takes in 9 finetuning parameters, and it is likely more will need to be added.
 
 ### Llama.cpp Repository
-The Llama.cpp repository is a versatile tool that facilitates several key tasks for working with models. It allows users to:  
+The Llama.cpp repository is a versatile tool that facilitates several key tasks for working with models. Some of its capabilities are:  
   
 1. Convert LoRA adapters to .ggml files  
 2. Convert base Huggingface models to .gguf files   
@@ -103,8 +103,6 @@ The Llama.cpp folder in this repository was cloned from an older version of the 
   
 Alternatively, instead of using convert-lora-to-ggml.py, you can use the merge_and_unload function from the Peft library to merge the base model with LoRA adapters, producing a Huggingface-formatted model. This merged model can then be converted to a .gguf file using convert-hf-to-gguf.py.  
   
-By following these steps, you can ensure compatibility with Ollama servers and leverage the full capabilities of your fine-tuned models.  
-
 ### Dataset Requirements
 The datasets passed into the finetuning API **must** be in this format:   
   
